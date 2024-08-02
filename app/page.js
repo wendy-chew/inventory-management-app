@@ -1,142 +1,179 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { Box, Stack, Typography, Button, Modal, TextField, Select, MenuItem } from '@mui/material'
-import { firestore } from '@/firebase'
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  setDoc,
-  deleteDoc,
-  getDoc,
-} from 'firebase/firestore'
+import { useState, useEffect, useRef } from 'react';
+import { Box, Stack, Typography, Button, Modal, TextField, Select, MenuItem } from '@mui/material';
+import { firestore, storage } from '@/firebase';
+import { collection, doc, getDocs, query, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import {Camera} from 'react-camera-pro';
 
 const style = {
   position: 'absolute',
   top: '50%',
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: '90vw',  // Adjusted for responsiveness
+  width: '90vw',
   maxWidth: 400,
-  bgcolor: '#F5F5F5', // Light grey background for the modal
-  border: '2px solid #00796B', // Teal border color
+  bgcolor: '#F5F5F5',
+  border: '2px solid #00796B',
   boxShadow: 24,
   p: 4,
   display: 'flex',
   flexDirection: 'column',
   gap: 3,
-}
+};
 
 const categories = [
-  'Vegetable',
-  'Fruit',
-  'Dairy',
-  'Grain',
-  'Protein',
-  'Beverage',
-  'Snack',
-  'Condiment',
-  'Frozen',
-  'Other',
-]
+  'Vegetable', 'Fruit', 'Dairy', 'Grain', 'Protein', 'Beverage', 'Snack', 'Condiment', 'Frozen', 'Other',
+];
 
 export default function Home() {
-  const [inventory, setInventory] = useState([])
-  const [open, setOpen] = useState(false)
-  const [itemName, setItemName] = useState('')
-  const [category, setCategory] = useState('')
-  const [quantity, setQuantity] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
-  const [editMode, setEditMode] = useState(false)
-  const [currentItem, setCurrentItem] = useState(null)
+  const [inventory, setInventory] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [itemName, setItemName] = useState('');
+  const [category, setCategory] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [editMode, setEditMode] = useState(false);
+  const [currentItem, setCurrentItem] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
+  const [isCameraVisible, setIsCameraVisible] = useState(false);
+  const cameraRef = useRef(null);
 
   const updateInventory = async () => {
-    const snapshot = query(collection(firestore, 'inventory'))
-    const docs = await getDocs(snapshot)
-    const inventoryList = []
+    const snapshot = query(collection(firestore, 'inventory'));
+    const docs = await getDocs(snapshot);
+    const inventoryList = [];
     docs.forEach((doc) => {
-      inventoryList.push({ name: doc.id, ...doc.data() })
-    })
-    setInventory(inventoryList)
-  }
+      inventoryList.push({ name: doc.id, ...doc.data() });
+    });
+    setInventory(inventoryList);
+  };
 
   useEffect(() => {
-    updateInventory()
-  }, [])
+    updateInventory();
+  }, []);
 
-  const addItem = async (item, category, quantity) => {
-    const docRef = doc(collection(firestore, 'inventory'), item)
-    const docSnap = await getDoc(docRef)
+  const uploadImage = async (file) => {
+    const storageRef = ref(storage, `images/${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  };
+
+  const addItem = async (item, category, quantity, imageUrl) => {
+    const docRef = doc(collection(firestore, 'inventory'), item);
+    const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      const { quantity: existingQuantity } = docSnap.data()
-      await setDoc(docRef, { quantity: existingQuantity + Number(quantity), category }, { merge: true })
+      const { quantity: existingQuantity } = docSnap.data();
+      await setDoc(docRef, { quantity: existingQuantity + Number(quantity), category, imageUrl }, { merge: true });
     } else {
-      await setDoc(docRef, { quantity: Number(quantity), category })
+      await setDoc(docRef, { quantity: Number(quantity), category, imageUrl });
     }
-    await updateInventory()
-  }
+    await updateInventory();
+  };
 
   const removeItem = async (item) => {
-    const docRef = doc(collection(firestore, 'inventory'), item)
-    const docSnap = await getDoc(docRef)
+    const docRef = doc(collection(firestore, 'inventory'), item);
+    const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      const { quantity } = docSnap.data()
+      const { quantity } = docSnap.data();
       if (quantity <= 1) {
-        await deleteDoc(docRef)
+        await deleteDoc(docRef);
       } else {
-        await setDoc(docRef, { quantity: quantity - 1 }, { merge: true })
+        await setDoc(docRef, { quantity: quantity - 1 }, { merge: true });
       }
     }
-    await updateInventory()
-  }
+    await updateInventory();
+  };
 
-  const editItem = async (item, newCategory, newQuantity) => {
-    const docRef = doc(collection(firestore, 'inventory'), item)
-    await setDoc(docRef, { category: newCategory, quantity: Number(newQuantity) }, { merge: true })
-    await updateInventory()
-  }
+  const editItem = async (item, newCategory, newQuantity, newImageUrl) => {
+    const docRef = doc(collection(firestore, 'inventory'), item);
+    await setDoc(docRef, { category: newCategory, quantity: Number(newQuantity), imageUrl: newImageUrl }, { merge: true });
+    await updateInventory();
+  };
 
   const handleOpen = (item = null) => {
     if (item) {
-      setEditMode(true)
-      setCurrentItem(item)
-      setItemName(item.name)
-      setCategory(item.category)
-      setQuantity(item.quantity)
+      setEditMode(true);
+      setCurrentItem(item);
+      setItemName(item.name);
+      setCategory(item.category);
+      setQuantity(item.quantity);
+      setImageUrl(item.imageUrl);
     } else {
-      setEditMode(false)
-      setItemName('')
-      setCategory('')
-      setQuantity('')
+      setEditMode(false);
+      setItemName('');
+      setCategory('');
+      setQuantity('');
+      setImageUrl('');
     }
-    setOpen(true)
-  }
+    setIsCameraVisible(false); // Hide camera initially
+    setOpen(true);
+  };
 
   const handleClose = () => {
-    setOpen(false)
-    setItemName('')
-    setCategory('')
-    setQuantity('')
-    setCurrentItem(null)
-  }
+    setOpen(false);
+    setItemName('');
+    setCategory('');
+    setQuantity('');
+    setCurrentItem(null);
+    setImageUrl('');
+    setIsCameraVisible(false); // Hide camera when modal is closed
+  };
 
   const handleSearchChange = (event) => {
-    setSearchQuery(event.target.value)
-  }
+    setSearchQuery(event.target.value);
+  };
 
   const handleCategoryChange = (event) => {
-    setSelectedCategory(event.target.value)
-  }
+    setSelectedCategory(event.target.value);
+  };
+
+  const handleCapture = async () => {
+    try {
+      const image = cameraRef.current.takePhoto();
+      console.log('Image captured:', image);
+      const blob = await fetch(image).then(res => res.blob());
+      const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+      const imageUrl = await uploadImage(file);
+      console.log('Image uploaded to:', imageUrl);
+      setImageUrl(imageUrl);
+      setIsCameraVisible(false); // Hide camera after capture
+    } catch (error) {
+      console.error('Error capturing image:', error);
+    }
+  };
+
+  const handleRetake = () => {
+    setIsCameraVisible(true); // Show camera to retake the picture
+    setImageUrl(''); // Clear the previously captured image
+  };
+
+  const handleRemoveImage = () => {
+    setImageUrl(''); // Remove captured image
+    setIsCameraVisible(false); // Hide camera and captured image section
+  };
+
+  const handleAddImage = () => {
+    setIsCameraVisible(true); // Show camera
+  };
+
+  const handleSubmit = async () => {
+    if (editMode) {
+      await editItem(currentItem.name, category, quantity, imageUrl);
+    } else {
+      await addItem(itemName, category, quantity, imageUrl);
+    }
+    handleClose();
+  };
 
   const filteredInventory = inventory
-    .filter(item => 
+    .filter(item =>
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
       (selectedCategory === '' || item.category === selectedCategory)
     )
-    .sort((a, b) => b.name.toLowerCase().startsWith(searchQuery.toLowerCase()) - a.name.toLowerCase().startsWith(searchQuery.toLowerCase()))
+    .sort((a, b) => b.name.toLowerCase().startsWith(searchQuery.toLowerCase()) - a.name.toLowerCase().startsWith(searchQuery.toLowerCase()));
 
   return (
     <Box
@@ -146,14 +183,14 @@ export default function Home() {
       flexDirection={'column'}
       alignItems={'center'}
       gap={2}
-      px={2}  // Padding for mobile
-      color={'#f5f5f5'}  // Light text color
-      p={4}  // Added padding for spacing around the entire page
+      px={2}
+      color={'#f5f5f5'}
+      p={4}
     >
       <Box
         width="100%"
-        maxWidth="1200px"  // Maximum width of the content wrapper
-        mx="auto"  // Center horizontally
+        maxWidth="1200px"
+        mx="auto"
       >
         <Modal
           open={open}
@@ -194,16 +231,27 @@ export default function Home() {
                 onChange={(e) => setQuantity(e.target.value)}
                 type="number"
               />
+              {isCameraVisible ? (
+                <Box>
+                  <Camera ref={cameraRef} aspectRatio={16 / 9} />
+                  <Button variant="contained" onClick={handleCapture}>Capture</Button>
+                </Box>
+              ) : imageUrl ? (
+                <Box>
+                  <Typography variant="body1">Captured Image:</Typography>
+                  <img src={imageUrl} alt="Captured" style={{ width: '100%' }} />
+                  <Stack direction="row" spacing={2}>
+                    <Button variant="contained" onClick={handleRetake}>Retake</Button>
+                    <Button variant="contained" color="error" onClick={handleRemoveImage}>Remove Image</Button>
+                  </Stack>
+                </Box>
+              ) : (
+                <Button variant="contained" onClick={handleAddImage}>Add Image</Button>
+              )}
               <Button
                 variant="contained"
-                onClick={() => {
-                  if (editMode) {
-                    editItem(currentItem.name, category, quantity)
-                  } else {
-                    addItem(itemName, category, quantity)
-                  }
-                  handleClose()
-                }}
+                onClick={handleSubmit}
+                disabled={itemName === '' || category === '' || quantity === ''}
               >
                 {editMode ? 'Save' : 'Add'}
               </Button>
@@ -239,7 +287,7 @@ export default function Home() {
           <Box
             width="100%"
             height="100px"
-            bgcolor={'#00796B'} // Dark teal background for the header
+            bgcolor={'#00796B'}
             display={'flex'}
             justifyContent={'center'}
             alignItems={'center'}
@@ -249,19 +297,19 @@ export default function Home() {
             </Typography>
           </Box>
           <Stack width="100%" height="auto" spacing={2} overflow={'auto'}>
-            {filteredInventory.map(({ name, quantity, category }) => (
+            {filteredInventory.map(({ name, quantity, category, imageUrl }) => (
               <Box
                 key={name}
                 width="100%"
                 minHeight="150px"
                 display={'flex'}
-                flexDirection={{ xs: 'column', sm: 'row' }}  // Responsive direction
+                flexDirection={{ xs: 'column', sm: 'row' }}
                 justifyContent={'space-between'}
                 alignItems={'center'}
-                bgcolor={'#FFFFFF'} // White background for inventory items
+                bgcolor={'#FFFFFF'}
                 paddingX={2}
                 paddingY={1}
-                border={'1px solid #E0E0E0'} // Light grey border for item boxes
+                border={'1px solid #E0E0E0'}
               >
                 <Typography variant={'h5'} color={'#333'} textAlign={'center'}>
                   {name.charAt(0).toUpperCase() + name.slice(1)}
@@ -272,16 +320,17 @@ export default function Home() {
                 <Typography variant={'h6'} color={'#555'} textAlign={'center'}>
                   {category}
                 </Typography>
+                {imageUrl && <img src={imageUrl} alt={name} width={100} />}
                 <Stack
-                  direction={{ xs: 'column', sm: 'row' }}  // Change direction based on screen size
-                  spacing={2}  // Spacing between buttons
-                  alignItems="center"  // Center buttons in the column direction
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={2}
+                  alignItems="center"
                 >
                   <Button
                     variant="contained"
                     color="primary"
-                    onClick={() => handleOpen({ name, category, quantity })}
-                    sx={{ width: { xs: '100%', sm: 'auto' }, mb: { xs: 2, sm: 0 } }} // Responsive width and margin
+                    onClick={() => handleOpen({ name, category, quantity, imageUrl })}
+                    sx={{ width: { xs: '100%', sm: 'auto' }, mb: { xs: 2, sm: 0 } }}
                   >
                     Edit
                   </Button>
@@ -289,7 +338,7 @@ export default function Home() {
                     variant="contained"
                     color="error"
                     onClick={() => removeItem(name)}
-                    sx={{ width: { xs: '100%', sm: 'auto' } }} // Responsive width
+                    sx={{ width: { xs: '100%', sm: 'auto' } }}
                   >
                     Remove
                   </Button>
@@ -300,5 +349,5 @@ export default function Home() {
         </Box>
       </Box>
     </Box>
-  )
+  );
 }

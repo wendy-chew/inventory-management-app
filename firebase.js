@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 const firebaseConfig = {
     apiKey: "AIzaSyCUigVLDfsEluMbfN0K9w2n4j4pxKFKQoc",
     authDomain: "inventory-management-app-3acac.firebaseapp.com",
@@ -10,5 +11,6 @@ const firebaseConfig = {
     measurementId: "G-DNQ9HY488Q"
  };
 const app = initializeApp(firebaseConfig);
-const firestore = getFirestore(app);
-export { firestore };
+const firestore = getFirestore(app);const storage = getStorage(app);
+
+export { firestore, storage };
